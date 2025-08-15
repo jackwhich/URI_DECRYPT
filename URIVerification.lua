@@ -25,17 +25,28 @@ if err == "truncated" then
     ngx.exit(error.truncatedHeader())
 end
 
--- 根据请求头选择解码密钥（仅用于app）
-local version = headers["eb-version"]
+-- 新增header Request-Body-Encrypt-Hash 处理
+local encrypt_hash = headers["Request-Body-Encrypt-Hash"]
 
--- 根据请求头选择解码密钥（仅用于app）
-if version and config.CREDENTIAL.app[version] then
-    aes_256_cbc = aes:new(config.CREDENTIAL.app[version].key, config.CREDENTIAL.app[version].iv)
+if encrypt_hash then
+    if config.CREDENTIAL and config.CREDENTIAL[encrypt_hash] then
+        -- 直接通过哈希值查找密钥
+        aes_256_cbc = aes:new(config.CREDENTIAL[encrypt_hash].key,config.CREDENTIAL[encrypt_hash].iv)
+    else
+        return ngx.exit(error.invaidVisibleType())
+    end
+
 else
-    -- 如果没有找到版本，则使用默认的解密密钥
-    aes_256_cbc = aes_256_cbc_app
-end
+    -- 根据请求头选择解码密钥（仅用于app）
+    local version = headers["eb-version"]
 
+    if version and config.CREDENTIAL.app[version] then
+        aes_256_cbc = aes:new(config.CREDENTIAL.app[version].key,config.CREDENTIAL.app[version].iv)
+    else
+        -- 如果没有找到版本，则使用默认的解密密钥（仅在 eb-version 路径下生效）
+        aes_256_cbc = aes_256_cbc_app
+    end
+end
 
 -- 根据请求头选择解码密钥（仅用于web）
 local web_version = headers["url-version"]
